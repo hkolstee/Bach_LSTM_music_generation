@@ -25,7 +25,7 @@ device = torch.device("cpu")
 # print(torch.cuda.device_count())
 # print(torch.cuda.get_device_name(0))
 
-# to find float index in unique float list of standar scaled array
+# to find float index in unique float list of standard scaled array
 # works also for ints when not scaled
 def uniqueLocation(uniques, note):
     for index, unique in enumerate(uniques):
@@ -48,7 +48,6 @@ def one_hot_encode(y: np.ndarray, voices: np.ndarray) -> np.ndarray:
     # one hot encode each note
     for timestep, notes in enumerate(y):
         for voice, note in enumerate(notes):
-            # math.isclose for standard scaled floats
             if (voice == 0):
                 # get location in uniques of current note
                 one_hot_location = uniqueLocation(unique_voice1, note)
@@ -110,7 +109,7 @@ class LSTM_model(nn.Module):
         self.relu = nn.ReLU()
 
         # dropout layer
-        self.dropout = nn.Dropout(0.2) 
+        self.dropout = nn.Dropout(0.1) 
 
         # max pool
         self.pool = nn.MaxPool2d(2, 2)
@@ -136,19 +135,24 @@ class LSTM_model(nn.Module):
         lstm_input_size = lstm_input_size - kernel_conv2d + (2 * padding) + 1
         self.conv2d_3 = nn.Conv2d(c_out2, c_out3, kernel_size = kernel_conv2d, padding = padding)
 
-        self.lstm = nn.LSTM(c_out3 * lstm_input_size, hidden_size, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(c_out3 * lstm_input_size, hidden_size, num_layers, dropout=0.05, batch_first=True)
         self.linear = nn.Linear(hidden_size, output_size)
 
         print("LSTM initialized with {} input size, {} hidden layer size, {} number of LSTM layers, and an output size of {}".format(input_size, hidden_size, num_layers, output_size))
         # reset states in case of stateless use
-        self.reset_states()
+        # self.reset_states()
+        self.reset_states(batch_size)
 
     # reset hidden state and cell state, should be before each new sequence
     #   In our problem: every epoch, as it is one long sequence
-    def reset_states(self):
+    def reset_states(self, batch_size):
+    # def reset_states(self):
         # hidden state and cell state for LSTM 
-        self.hn = torch.zeros(self.num_layers,  1, self.hidden_size).to(device)
-        self.cn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
+        self.hn = torch.zeros(self.num_layers,  batch_size, self.hidden_size).to(device)
+        self.cn = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+
+        # self.hn = torch.zeros(self.num_layers,  1, self.hidden_size).to(device)
+        # self.cn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
 
     def forward(self, input, stateful):
         # pass through first conv layer
@@ -165,7 +169,7 @@ class LSTM_model(nn.Module):
         # dropout
         # out = self.dropout(out)
 
-        # pass through third conv layer
+        # # pass through third conv layer
         out = self.conv2d_3(out)
         out = self.relu(out)
 
@@ -175,12 +179,19 @@ class LSTM_model(nn.Module):
         # simple forward function
         # stateful = keep hidden states entire sequence length
         if stateful:
+            # lstm layer
             out, (self.hn, self.cn) = self.lstm(out, (self.hn.detach(), self.cn.detach())) 
+            # linear output layer
             out = self.linear(out[:,-1,:])
         else:
-            hn = torch.zeros(self.num_layers,  1, self.hidden_size).to(device)
-            cn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
-            out, (hn, cn) = self.lstm(out, (hn, cn)) 
+            # initiaze hidden and cell states
+            hn = torch.zeros(self.num_layers,  input.size(0), self.hidden_size).to(device)
+            cn = torch.zeros(self.num_layers, input.size(0), self.hidden_size).to(device)
+            # hn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
+            # cn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
+            # lstm layer
+            out, (hn, cn) = self.lstm(out, (hn, cn))
+            # linear output layer
             out = self.linear(out[:,-1,:])
 
         return out
@@ -199,7 +210,7 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
         # reset lstm hidden and cell state (stateful lstm = reset states once per sequence)
         # if not, reset automatically each forward call
         if stateful:
-            model.reset_states()
+            model.reset_states(train_loader.batch_size)
         
         # train loop
         for i, (inputs, labels) in enumerate(tqdm(train_loader)):
@@ -237,10 +248,11 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
         # check if lowest loss
         if (train_loss < lowest_train_loss):
             lowest_train_loss = train_loss
+            torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + ".pth")
         # if lowest till now, save model (checkpointing)
         if (test_loss < lowest_test_loss):
             lowest_test_loss = test_loss
-            torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + ".pth")
+            torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + "test" + ".pth")
     
     return lowest_train_loss, lowest_test_loss
 
@@ -291,15 +303,20 @@ def main():
     split_size = 0.1
     
     # hyperparameters for fine-tuning
+        # window_size = sliding window on time-sequence data for input
+        # hidden_size = hidden units of lstm layer(s)
+        # conv_channels = number of channels in the first conv layer (multiplied by 2 every next layer)
+        # nr_layers = number of lstm layers stacked after each other
     hyperparams = dict(
-        window_size = [64],
+        window_size = [80],
         hidden_size = [256],
-        conv_channels = [8]
+        conv_channels = [8],
+        nr_layers = [2]
     )
     hyperparam_values = [value for value in hyperparams.values()]
 
     # lowest test loss for choosing model
-    for run_id, (window_size, hidden_size, conv_channels) in enumerate(product(*hyperparam_values)):
+    for run_id, (window_size, hidden_size, conv_channels, nr_layers) in enumerate(product(*hyperparam_values)):
         # tensorboard summary writer
         writer = SummaryWriter(f'runs/window_size={window_size} hidden_size={hidden_size} conv_channels={conv_channels}')
         
@@ -317,8 +334,7 @@ def main():
         # Input/output dimensions
         input_size = voices.shape[1]
         output_size = labels.size(1)
-        # How many LSTM layers stacked after each other
-        nr_layers = 1
+
         # create model
         lstm_model = LSTM_model(input_size, output_size, hidden_size, nr_layers, batch_size, conv_channels)
 
@@ -331,7 +347,7 @@ def main():
         lstm_model = lstm_model.to(device)
         
         # training loop
-        epochs = 150
+        epochs = 400
         stateful = True
         lowest_train_loss, lowest_test_loss = training(lstm_model, train_loader, test_loader, epochs, optimizer, loss_func, stateful, writer)
         

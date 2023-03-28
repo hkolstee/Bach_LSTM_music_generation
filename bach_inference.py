@@ -32,56 +32,70 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
     # BCEwithLogitLoss uses sigmoid when calculating loss, but we need to pass through
     sigmoid = nn.Sigmoid()
 
+    # last output
+    last_output = np.zeros(98,)
+
     # prepare input
     input = torch.tensor(input, dtype=torch.float32).unsqueeze(0)
-    for i in range(steps):
-        # print(input.shape)
-        output = lstm_model(input, stateful=False)
-        output = sigmoid(output)
-        output = output.detach().numpy().squeeze()
-        
-        # get the indices with highest value from model forward output
-        note_voice1 = np.argmax(output[:len(unique_voice1)])
-        note_voice2 = np.argmax(output[len(unique_voice1) : len(unique_voice1) + len(unique_voice2)])
-        note_voice3 = np.argmax(output[len(unique_voice1) + len(unique_voice2) : len(unique_voice1) + len(unique_voice2) + len(unique_voice3)])
-        note_voice4 = np.argmax(output[-len(unique_voice4):])
+    with torch.no_grad():
+        for i in range(steps):
+            # print(input.shape)
+            output = lstm_model(input, stateful=False)
+            output = sigmoid(output)
+            # print(output)
+            output = output.detach().numpy().squeeze()
 
-        # get notes
-        note_voice1 = one_hot_values[note_voice1]
-        note_voice2 = one_hot_values[len(unique_voice1) + note_voice2]
-        note_voice3 = one_hot_values[len(unique_voice1) + len(unique_voice2) + note_voice3]
-        note_voice4 = one_hot_values[len(unique_voice1) + len(unique_voice2) + len(unique_voice3) + note_voice4]
+            # add last output to new output
+            output += 0.75 * last_output
+            
+            # get the indices with highest value from model forward output
+            note_voice1 = np.argmax(output[:len(unique_voice1)])
+            note_voice2 = np.argmax(output[len(unique_voice1) : len(unique_voice1) + len(unique_voice2)])
+            note_voice3 = np.argmax(output[len(unique_voice1) + len(unique_voice2) : len(unique_voice1) + len(unique_voice2) + len(unique_voice3)])
+            note_voice4 = np.argmax(output[-len(unique_voice4):])
+            # print(note_voice1, note_voice2, note_voice3, note_voice4)
 
-        # add to array and inverse scale
-        next_notes = np.array([note_voice1, note_voice2, note_voice3, note_voice4])
-        next_notes_invscaled = scaler.inverse_transform(next_notes.reshape(1, -1))
-        predicted_notes = np.concatenate((predicted_notes, next_notes_invscaled), axis = 0)
+            # get notes
+            note_voice1 = one_hot_values[note_voice1]
+            note_voice2 = one_hot_values[len(unique_voice1) + note_voice2]
+            note_voice3 = one_hot_values[len(unique_voice1) + len(unique_voice2) + note_voice3]
+            note_voice4 = one_hot_values[len(unique_voice1) + len(unique_voice2) + len(unique_voice3) + note_voice4]
 
-        # change input
-        # drop oldest notes
-        input = input[0][1:]
-        # concat predicted notes
-        input = torch.cat((input, torch.Tensor(next_notes).unsqueeze(0)))
-        input = input.unsqueeze(0)
+            # add to array and inverse scale
+            next_notes = np.array([note_voice1, note_voice2, note_voice3, note_voice4])
+            next_notes_invscaled = scaler.inverse_transform(next_notes.reshape(1, -1))
+            # print(next_notes_invscaled)
+            predicted_notes = np.concatenate((predicted_notes, next_notes_invscaled), axis = 0)
+            # print(predicted_notes)
+
+            # remember last output to promote prediction based on last prediction (longer notes)
+            last_output = output
+
+            # change input
+            # drop oldest notes
+            input = input[0][1:]
+            # concat predicted notes
+            input = torch.cat((input, torch.Tensor(next_notes).unsqueeze(0)))
+            input = input.unsqueeze(0)
 
     return(predicted_notes.astype(np.int32)[1:])
 
 def main():
     # define parameters used here
         # sliding window size
-    window_size = 48
-    hidden_size = 32
+    window_size = 80
+    hidden_size = 256
     conv_channels = 8
     input_size = 4
     output_size = 98
-    num_layers = 1
+    num_layers = 2
         # train/test split
     split_size = 0.1
     batch_size = 1
 
     # initialize model
     model = LSTM_model(input_size, output_size, hidden_size, num_layers, batch_size, conv_channels)
-    model.load_state_dict(torch.load("models/model48328train.pth", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load("models/model802568.pth", map_location=torch.device('cpu')))
 
     # load data, 4 voices of instruments
     voices = np.loadtxt("input.txt")
