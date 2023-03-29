@@ -14,9 +14,6 @@ fluidsynth.init("040_Florestan_String_Qraurtet.sf2", "oss")
 def main():
     # load network output music
     voices = np.loadtxt("output/output.txt")
-    # voices = np.loadtxt("input.txt")
-    # print(voices.shape)
-    # voices = voices[]
     
     encoded_voices = [Track(), Track(), Track(), Track()] 
     
