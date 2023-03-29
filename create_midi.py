@@ -6,7 +6,8 @@ from mingus.containers import NoteContainer, Bar, Track, Composition
 from mingus.midi import midi_file_out
 
 # initialize soundfont file that will be used to play music
-fluidsynth.init("soundfonts/YamahaC5Grand-v2_4.sf2", "alsa")
+# fluidsynth.init("soundfonts/YamahaC5Grand-v2_4.sf2", "oss")
+fluidsynth.init("040_Florestan_String_Qraurtet.sf2", "oss")
 # fluidsynth.init("soundfonts/Cello_Maximus.sf2", "alsa")
 # fluidsynth.init("soundfonts/040_Florestan_String_Quartet.sf2", "alsa")
 

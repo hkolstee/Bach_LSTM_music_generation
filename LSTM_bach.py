@@ -109,19 +109,16 @@ class LSTM_model(nn.Module):
         self.relu = nn.ReLU()
 
         # dropout layer
-        self.dropout = nn.Dropout(0.1) 
+        self.dropout = nn.Dropout(0.05) 
 
-        # max pool
-        self.pool = nn.MaxPool2d(2, 2)
-
-         # first conv layer
+        # first conv layer
         padding = 1
         kernel_conv2d = 2
         c_out = channels
         lstm_input_size = input_size - kernel_conv2d + (2 * padding) + 1
-        self.conv2d_1 = nn.Conv2d(batch_size, c_out, kernel_size = kernel_conv2d, padding = padding)
+        self.conv2d_1 = nn.Conv2d(1, c_out, kernel_size = kernel_conv2d, padding = padding)
 
-        # second conv layer
+        # # second conv layer
         padding = 1
         kernel_conv2d += 1
         c_out2 = c_out * 2
@@ -129,13 +126,14 @@ class LSTM_model(nn.Module):
         self.conv2d_2 = nn.Conv2d(c_out, c_out2, kernel_size = kernel_conv2d, padding = padding)
 
         # third conv layer
-        padding = 0
+        padding = 1
         kernel_conv2d += 1
         c_out3 = c_out2 * 2
         lstm_input_size = lstm_input_size - kernel_conv2d + (2 * padding) + 1
         self.conv2d_3 = nn.Conv2d(c_out2, c_out3, kernel_size = kernel_conv2d, padding = padding)
 
         self.lstm = nn.LSTM(c_out3 * lstm_input_size, hidden_size, num_layers, dropout=0.05, batch_first=True)
+        # self.lstm = nn.LSTM(input_size, hidden_size, num_layers, dropout=0.05, batch_first=True)
         self.linear = nn.Linear(hidden_size, output_size)
 
         print("LSTM initialized with {} input size, {} hidden layer size, {} number of LSTM layers, and an output size of {}".format(input_size, hidden_size, num_layers, output_size))
@@ -151,34 +149,40 @@ class LSTM_model(nn.Module):
         self.hn = torch.zeros(self.num_layers,  batch_size, self.hidden_size).to(device)
         self.cn = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
 
-        # self.hn = torch.zeros(self.num_layers,  1, self.hidden_size).to(device)
-        # self.cn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
-
     def forward(self, input, stateful):
+        # conv layer wont take it right now as it seems to have batch_size number of channels 
+        # [batch_size,window_size,4]->[batch_size,1,window_size,4]
+        # if (input.size(1) > 1):
+        input = input.unsqueeze(1)
+
         # pass through first conv layer
         out = self.conv2d_1(input)
         out = self.relu(out)
 
-        # dropout
+        # # dropout
         out = self.dropout(out)
 
-        # pass through second conv layer
+        # # pass through second conv layer
         out = self.conv2d_2(out)
         out = self.relu(out)
         
-        # dropout
+        # # dropout
         # out = self.dropout(out)
 
-        # # pass through third conv layer
+        # # # pass through third conv layer
         out = self.conv2d_3(out)
         out = self.relu(out)
 
-        # reshape for the lstm
-        out = out.view(1, out.size(1), -1)
+        # # reshape for the lstm
+        out = out.view(input.size(0), out.size(2), -1)
 
         # simple forward function
         # stateful = keep hidden states entire sequence length
         if stateful:
+            # for last batch which might not be the same shape
+            if (input.size(0) != self.hn.size(1)):
+                self.reset_states(input.size(0))
+              
             # lstm layer
             out, (self.hn, self.cn) = self.lstm(out, (self.hn.detach(), self.cn.detach())) 
             # linear output layer
@@ -297,7 +301,7 @@ def main():
     print("Data shape (4 voices):", voices.shape)
 
     # batch_size for training network
-    batch_size = 1
+    batch_size = 10
 
     # split size of test/train data
     split_size = 0.1

@@ -33,7 +33,7 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
     sigmoid = nn.Sigmoid()
 
     # last output
-    last_output = np.zeros(98,)
+    # last_output = np.zeros(98,)
 
     # prepare input
     input = torch.tensor(input, dtype=torch.float32).unsqueeze(0)
@@ -46,7 +46,7 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
             output = output.detach().numpy().squeeze()
 
             # add last output to new output
-            output += 0.75 * last_output
+            # output += 0.75 * last_output
             
             # get the indices with highest value from model forward output
             note_voice1 = np.argmax(output[:len(unique_voice1)])
@@ -69,7 +69,7 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
             # print(predicted_notes)
 
             # remember last output to promote prediction based on last prediction (longer notes)
-            last_output = output
+            # last_output = output
 
             # change input
             # drop oldest notes
@@ -89,13 +89,14 @@ def main():
     input_size = 4
     output_size = 98
     num_layers = 2
-        # train/test split
+        # train/test split, to continue predicting
     split_size = 0.1
-    batch_size = 1
+    batch_size = 32
 
     # initialize model
     model = LSTM_model(input_size, output_size, hidden_size, num_layers, batch_size, conv_channels)
-    model.load_state_dict(torch.load("models/model802568.pth", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load("models/LSTM_80_256_8_3conv_train.pth", map_location=torch.device('cpu')))
+    # model.load_state_dict(torch.load("models/model802568train.pth", map_location=torch.device('cpu')))
 
     # load data, 4 voices of instruments
     voices = np.loadtxt("input.txt")
