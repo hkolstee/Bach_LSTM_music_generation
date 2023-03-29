@@ -133,12 +133,10 @@ class LSTM_model(nn.Module):
         self.conv2d_3 = nn.Conv2d(c_out2, c_out3, kernel_size = kernel_conv2d, padding = padding)
 
         self.lstm = nn.LSTM(c_out3 * lstm_input_size, hidden_size, num_layers, dropout=0.05, batch_first=True)
-        # self.lstm = nn.LSTM(input_size, hidden_size, num_layers, dropout=0.05, batch_first=True)
         self.linear = nn.Linear(hidden_size, output_size)
 
         print("LSTM initialized with {} input size, {} hidden layer size, {} number of LSTM layers, and an output size of {}".format(input_size, hidden_size, num_layers, output_size))
         # reset states in case of stateless use
-        # self.reset_states()
         self.reset_states(batch_size)
 
     # reset hidden state and cell state, should be before each new sequence
@@ -152,7 +150,6 @@ class LSTM_model(nn.Module):
     def forward(self, input, stateful):
         # conv layer wont take it right now as it seems to have batch_size number of channels 
         # [batch_size,window_size,4]->[batch_size,1,window_size,4]
-        # if (input.size(1) > 1):
         input = input.unsqueeze(1)
 
         # pass through first conv layer
@@ -191,8 +188,6 @@ class LSTM_model(nn.Module):
             # initiaze hidden and cell states
             hn = torch.zeros(self.num_layers,  input.size(0), self.hidden_size).to(device)
             cn = torch.zeros(self.num_layers, input.size(0), self.hidden_size).to(device)
-            # hn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
-            # cn = torch.zeros(self.num_layers, 1, self.hidden_size).to(device)
             # lstm layer
             out, (hn, cn) = self.lstm(out, (hn, cn))
             # linear output layer
