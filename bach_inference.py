@@ -90,12 +90,12 @@ def main():
     output_size = 98
     num_layers = 2
         # train/test split, to continue predicting
-    split_size = 0.1
+    split_size = 0.0
     batch_size = 32
 
     # initialize model
     model = LSTM_model(input_size, output_size, hidden_size, num_layers, batch_size, conv_channels)
-    model.load_state_dict(torch.load("models/LSTM_80_256_8_3conv_train.pth", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load("models/LSTM_medhigh_dropout.pth", map_location=torch.device('cpu')))
     # model.load_state_dict(torch.load("models/model802568train.pth", map_location=torch.device('cpu')))
 
     # load data, 4 voices of instruments

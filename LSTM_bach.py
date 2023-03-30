@@ -95,9 +95,9 @@ class NotesDataset(Dataset):
     def __len__(self):
         return self.nr_samples
 
-# LSTM model with two conv layers
-# the model is stateful, meaning the internal hidden state and cell state is passed
-# into the model each batch and reset once per epoch
+# LSTM model with three conv layers
+# The model can be set to stateful, meaning the internal hidden state and cell state is passed
+#   into the model each batch and reset once per epoch.
 class LSTM_model(nn.Module):
     def __init__(self, input_size, output_size, hidden_size, num_layers, batch_size, channels):
         super(LSTM_model, self).__init__()
@@ -109,7 +109,7 @@ class LSTM_model(nn.Module):
         self.relu = nn.ReLU()
 
         # dropout layer
-        self.dropout = nn.Dropout(0.05) 
+        self.dropout = nn.Dropout(0.25) 
 
         # first conv layer
         padding = 1
@@ -132,7 +132,7 @@ class LSTM_model(nn.Module):
         lstm_input_size = lstm_input_size - kernel_conv2d + (2 * padding) + 1
         self.conv2d_3 = nn.Conv2d(c_out2, c_out3, kernel_size = kernel_conv2d, padding = padding)
 
-        self.lstm = nn.LSTM(c_out3 * lstm_input_size, hidden_size, num_layers, dropout=0.05, batch_first=True)
+        self.lstm = nn.LSTM(c_out3 * lstm_input_size, hidden_size, num_layers, dropout=0.2, batch_first=True)
         self.linear = nn.Linear(hidden_size, output_size)
 
         print("LSTM initialized with {} input size, {} hidden layer size, {} number of LSTM layers, and an output size of {}".format(input_size, hidden_size, num_layers, output_size))
@@ -164,7 +164,7 @@ class LSTM_model(nn.Module):
         out = self.relu(out)
         
         # # dropout
-        # out = self.dropout(out)
+        out = self.dropout(out)
 
         # # # pass through third conv layer
         out = self.conv2d_3(out)
@@ -195,7 +195,7 @@ class LSTM_model(nn.Module):
 
         return out
 
-def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, optimizer, loss_func, stateful, writer):
+def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, optimizer, loss_func, scheduler, stateful, writer):
     # lowest train/test loss
     lowest_train_loss = np.inf
     lowest_test_loss = np.inf
@@ -212,6 +212,7 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
             model.reset_states(train_loader.batch_size)
         
         # train loop
+        model.train()
         for i, (inputs, labels) in enumerate(tqdm(train_loader)):
             # reset gradient function of weights
             optimizer.zero_grad()
@@ -225,8 +226,11 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
             optimizer.step()
             # add to running loss
             running_loss_train += loss.item()
-    
+        # learning rate scheduler step
+        scheduler.step()
+
         # Test evaluation
+        model.eval()
         with torch.no_grad():
             for j, (inputs, labels) in enumerate(test_loader):
                 # forward pass
@@ -341,6 +345,7 @@ def main():
         #   multi lable one hot encoded prediction only works with BCEwithlogitloss
         loss_func = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(lstm_model.parameters(), lr=0.001)
+        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.1, total_iters=1500)
         
         # to gpu if possible
         lstm_model = lstm_model.to(device)
@@ -348,7 +353,7 @@ def main():
         # training loop
         epochs = 400
         stateful = True
-        lowest_train_loss, lowest_test_loss = training(lstm_model, train_loader, test_loader, epochs, optimizer, loss_func, stateful, writer)
+        lowest_train_loss, lowest_test_loss = training(lstm_model, train_loader, test_loader, epochs, optimizer, loss_func, scheduler, stateful, writer)
         
         # save hparams along with lowest train/test losses
         writer.add_hparams(
