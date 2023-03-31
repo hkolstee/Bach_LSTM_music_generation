@@ -43,7 +43,7 @@ The model consist of a convolutional LSTM with 3 convolutional layers followed b
 The following hyperparameters were all tested (as this was my introduction to LSTMs):
 - window size: [16, 24, 32, 64]
 - convolutional channels (gets doubled for each consecutive conv layer): [8, 16]
-- lstm hidden units: [8, 16, 32, 64, 128]
+- lstm hidden units: [8, 24, 64, 128]
 - number of stacked lstm layers: [1, 2] (after other params)
 
 These configurations were run for 100 epochs to determine train/test trajectory.
@@ -54,7 +54,7 @@ The data was standardized, making sure no information leaks occured. The scaler 
 
 We found the dataset to be too small, with the test data being not representative of the train data (features learned in train data did not generalize well to test data), resulting in models extracted using early stopping not generating good results.
 
-The lowest test losses occured quickly after the start of training, meaning the models overfit quickly. Even when using really small models (~8/16 hidden units, 1/2 conv layers with 8 channels, subsential dropouts) the models quickly overfit. Larger models sometimes achieved even lower test loss, but overfit thereafter quickly. It seemed that the current configuration of test/train split was not working as well as I would have liked. 
+The lowest test losses occured quickly after the start of training, meaning the models overfit quickly. Even when using really small models (~8/16 hidden units, 1/2 conv layers with 8 channels, subsential dropouts and regularization) the models quickly overfit. Larger models sometimes achieved even lower test loss, but overfit thereafter quickly. It seemed that the current configuration of test/train split was not working as well as I would have liked. 
 
 The next step I took was making a model with a large sliding window of 80 notes, with a large double LSTM layer of 256 units. My thought process was, as I couldn't rely as well on the test loss as I would've liked, I would train a substentially sized network and keep the complexity in check using dropout and weight decay/l2 regularization. The dropout was tuned by running different dropout frequencies and subjectively judging the generated music. I trained the model using google colab to a small training loss, and used this to generate bach-like music, which for the first time resulted in generated music that sounded like actual music. The outputs of different tests can be found in ***/output/...***.
 
