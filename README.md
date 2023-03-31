@@ -36,7 +36,7 @@ example (step 1251-1266):
 66	54	52	47 <br>
 66	54	52	47 <br>
 
-## Model architecture (LSTM_bach.ipynb/LSTM_bach.py)
+## Model architecture (```LSTM_bach.ipynb / LSTM_bach.py```)
 The model consist of a convolutional LSTM with 3 convolutional layers followed by a double LSTM layer.
 
 ### Hyperparameter testing
