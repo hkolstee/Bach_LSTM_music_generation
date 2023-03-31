@@ -1,4 +1,4 @@
-# Bach unfinished fugue 
+# Bach unfinished fugue - LSTM music generation
 **This project was one of the project suggestions for a course at my university (University of Groningen). I worked on the project with my teammates, but did not get (for me) satisfactory results, partly due to time constraints. We originally used a simple LSTM model (single small layer, implemented in tensorflow). I wanted to do it differently and started from scratch using PyTorch. All code in this repository folder is written by me. The description of the project is as follows:**
  
 Long time ago (1993) there was a time series prediction competition organized by the Santa Fe
