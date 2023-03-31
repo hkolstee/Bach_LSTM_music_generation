@@ -195,6 +195,7 @@ class LSTM_model(nn.Module):
 
         return out
 
+
 def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, optimizer, loss_func, scheduler, stateful, writer):
     # lowest train/test loss
     lowest_train_loss = np.inf
@@ -229,33 +230,43 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
         # learning rate scheduler step
         scheduler.step()
 
-        # Test evaluation
-        model.eval()
-        with torch.no_grad():
-            for j, (inputs, labels) in enumerate(test_loader):
-                # forward pass
-                prediction = model(inputs, stateful)
-                # calculate loss
-                test_loss = loss_func(prediction, labels)
-                # add to running loss
-                running_loss_test += test_loss.item()
-
-        # print training running loss and add to tensorboard
+        # calc running loss
         train_loss = running_loss_train/len(train_loader)
-        test_loss = running_loss_test/len(test_loader)
-        print("Epoch:", epoch, "  Train loss:", train_loss,
-                                ", Test loss:", test_loss)
-        writer.add_scalar("Running train loss", train_loss, epoch)
-        writer.add_scalar("Running test loss", test_loss, epoch)
+
+        # add loss to tensorboard
+        writer.add_scalar("Running train loss", train_loss, epoch)        
 
         # check if lowest loss
         if (train_loss < lowest_train_loss):
             lowest_train_loss = train_loss
+            # Save model
             torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + ".pth")
-        # if lowest till now, save model (checkpointing)
-        if (test_loss < lowest_test_loss):
-            lowest_test_loss = test_loss
-            torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + "test" + ".pth")
+
+        # Test evaluation
+        if (test_loader):
+            model.eval()
+            with torch.no_grad():
+                for j, (inputs, labels) in enumerate(test_loader):
+                    # forward pass
+                    prediction = model(inputs, stateful)
+                    # calculate loss
+                    test_loss = loss_func(prediction, labels)
+                    # add to running loss
+
+            # calc running loss
+            test_loss = running_loss_test/len(test_loader)
+
+            # add test loss to tensorboard
+            writer.add_scalar("Running test loss", test_loss, epoch)
+
+            # if lowest till now, save model (checkpointing)
+            if (test_loss < lowest_test_loss):
+                lowest_test_loss = test_loss
+                torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + "test" + ".pth")
+
+        # print training running loss and add to tensorboard
+        print("Epoch:", epoch, "  Train loss:", train_loss,
+                                ", Test loss:", test_loss if test_loader else "Not available")
     
     return lowest_train_loss, lowest_test_loss
 
@@ -277,16 +288,24 @@ def createTrainTestDataloaders(voices, split_size, window_size, batch_size):
     scaler = StandardScaler()
     scaler.fit(train_voices)
     train_voices = scaler.transform(train_voices)
-    test_voices = scaler.transform(test_voices)
     all_voices = scaler.transform(voices)
     
-    # create datasets
+    # create train dataset
     train_dataset = NotesDataset(window_size, train_voices, all_voices)
-    test_dataset = NotesDataset(window_size, test_voices, all_voices)
 
-    # create dataloaders
+    # create train dataloader
     train_loader = DataLoader(train_dataset, batch_size)
-    test_loader = DataLoader(test_dataset, batch_size)
+
+    # Do the same for test set 
+    if (split_size > 0):
+        # scale test set
+        test_voices = scaler.transform(test_voices)
+        # create test dataset
+        test_dataset = NotesDataset(window_size, test_voices, all_voices)
+        # create test dataloader
+        test_loader = DataLoader(test_dataset, batch_size)
+    else:
+        test_loader = None
     
     return train_loader, test_loader
 
@@ -300,7 +319,7 @@ def main():
     print("Data shape (4 voices):", voices.shape)
 
     # batch_size for training network
-    batch_size = 10
+    batch_size = 32
 
     # split size of test/train data
     split_size = 0.1
@@ -318,7 +337,7 @@ def main():
     )
     hyperparam_values = [value for value in hyperparams.values()]
 
-    # lowest test loss for choosing model
+    # Loop through different combinations of the hyperparameters
     for run_id, (window_size, hidden_size, conv_channels, nr_layers) in enumerate(product(*hyperparam_values)):
         # tensorboard summary writer
         writer = SummaryWriter(f'runs/window_size={window_size} hidden_size={hidden_size} conv_channels={conv_channels}')
@@ -327,13 +346,12 @@ def main():
         train_loader, test_loader = createTrainTestDataloaders(voices, split_size, window_size, batch_size)
 
         # some informational print statements
-        print("\nNew run window/hidden/channels:", window_size, "/", hidden_size, "/", conv_channels)
+        print("\nNew run window/hidden/channels/batch_size:", window_size, "/", hidden_size, "/", conv_channels, "/", batch_size)
         features, labels = next(iter(train_loader))
         print("Input size:", features.size(), 
             "- Output size:", labels.size(), 
-            "- TRAIN samples:", len(train_loader), 
-            "- TEST samples:", len(test_loader))
-        
+            "- TRAIN batches:", len(train_loader), 
+            "- TEST batches:", len(test_loader) if test_loader else "Not available")
         # Input/output dimensions
         input_size = voices.shape[1]
         output_size = labels.size(1)
@@ -344,14 +362,15 @@ def main():
         # loss function and optimizer
         #   multi lable one hot encoded prediction only works with BCEwithlogitloss
         loss_func = nn.BCEWithLogitsLoss()
-        optimizer = optim.Adam(lstm_model.parameters(), lr=0.001)
-        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.1, total_iters=1500)
+        # AdamW = Adam with fixed weight decay (weight decay performed after controlling parameter-wise step size)
+        optimizer = optim.AdamW(lstm_model.parameters(), lr=0.001, weight_decay=1e-3)
+        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.1, total_iters=1100)
         
         # to gpu if possible
         lstm_model = lstm_model.to(device)
         
         # training loop
-        epochs = 400
+        epochs = 1500
         stateful = True
         lowest_train_loss, lowest_test_loss = training(lstm_model, train_loader, test_loader, epochs, optimizer, loss_func, scheduler, stateful, writer)
         

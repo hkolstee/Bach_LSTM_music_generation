@@ -9,8 +9,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 from LSTM_bach import LSTM_model, NotesDataset, training, createTrainTestDataloaders
 
-
-
 def main():
     # if you have an GPU
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

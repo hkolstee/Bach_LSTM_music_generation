@@ -10,14 +10,6 @@ from sklearn.preprocessing import StandardScaler
 
 from LSTM_bach import LSTM_model, NotesDataset
 
-# to find float index in unique float list of standar scaled array
-# works also for ints when not scaled
-def uniqueLocation(uniques, note):
-    for index, unique in enumerate(uniques):
-        if (math.isclose(unique, note, abs_tol=0.0001)):
-            return index
-    return None    
-
 def predictNextNotes(input, steps, lstm_model, voices, scaler):
     # predicted notes
     predicted_notes = np.zeros((1,4))
@@ -32,9 +24,6 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
     # BCEwithLogitLoss uses sigmoid when calculating loss, but we need to pass through
     sigmoid = nn.Sigmoid()
 
-    # last output
-    # last_output = np.zeros(98,)
-
     # prepare input
     input = torch.tensor(input, dtype=torch.float32).unsqueeze(0)
     with torch.no_grad():
@@ -45,9 +34,6 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
             # print(output)
             output = output.detach().numpy().squeeze()
 
-            # add last output to new output
-            # output += 0.75 * last_output
-            
             # get the indices with highest value from model forward output
             note_voice1 = np.argmax(output[:len(unique_voice1)])
             note_voice2 = np.argmax(output[len(unique_voice1) : len(unique_voice1) + len(unique_voice2)])
@@ -67,9 +53,6 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
             # print(next_notes_invscaled)
             predicted_notes = np.concatenate((predicted_notes, next_notes_invscaled), axis = 0)
             # print(predicted_notes)
-
-            # remember last output to promote prediction based on last prediction (longer notes)
-            # last_output = output
 
             # change input
             # drop oldest notes
@@ -91,12 +74,12 @@ def main():
     num_layers = 2
         # train/test split, to continue predicting
     split_size = 0.0
-    batch_size = 32
+    batch_size = 64
 
     # initialize model
     model = LSTM_model(input_size, output_size, hidden_size, num_layers, batch_size, conv_channels)
-    model.load_state_dict(torch.load("models/LSTM_medhigh_dropout.pth", map_location=torch.device('cpu')))
-    # model.load_state_dict(torch.load("models/model802568train.pth", map_location=torch.device('cpu')))
+    # load model file, I use CPU, can be done on gpu
+    model.load_state_dict(torch.load("models/LSTM_medlow_dropout.pth", map_location=torch.device("cpu")))
 
     # load data, 4 voices of instruments
     voices = np.loadtxt("input.txt")
