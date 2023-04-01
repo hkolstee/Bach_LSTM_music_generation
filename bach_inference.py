@@ -79,7 +79,7 @@ def main():
     # initialize model
     model = LSTM_model(input_size, output_size, hidden_size, num_layers, batch_size, conv_channels)
     # load model file, I use CPU, can be done on gpu
-    model.load_state_dict(torch.load("models/LSTM_medlow_dropout.pth", map_location=torch.device("cpu")))
+    model.load_state_dict(torch.load("models/0_001.pth", map_location=torch.device("cpu")))
 
     # load data, 4 voices of instruments
     voices = np.loadtxt("input.txt")

@@ -7,7 +7,7 @@ from mingus.midi import midi_file_out
 def main():
     # initialize soundfont file that will be used to play music
     # fluidsynth.init("soundfonts/YamahaC5Grand-v2_4.sf2", "oss")
-    fluidsynth.init("040_Florestan_String_Qraurtet.sf2", "oss")
+    fluidsynth.init("soundfonts/040_Florestan_String_Qraurtet.sf2", "oss")
     # fluidsynth.init("soundfonts/Cello_Maximus.sf2", "alsa")
     # fluidsynth.init("soundfonts/040_Florestan_String_Quartet.sf2", "alsa")
 
@@ -20,11 +20,11 @@ def main():
     # concatenate
     complete = np.concatenate((original, output), axis = 0)
 
-    # create 4 tracks for the 4 voices
-    encoded_voices = [Track(), Track(), Track(), Track()] 
-
     # create midi for output and comlete (original + output)
-    for i, voices in enumerate([output, complete]):
+    for run, voices in enumerate([output, complete]):
+        # create 4 tracks for the 4 voices
+        encoded_voices = [Track(), Track(), Track(), Track()] 
+        
         # loop through the generated voices
         for i, notes in enumerate([voices[:,0], voices[:,1], voices[:,2], voices[:,3]]):
             # initialize as impossible note
@@ -72,7 +72,7 @@ def main():
         output_composition.add_track(encoded_voices[2])
         output_composition.add_track(encoded_voices[3])
 
-        if (i == 0):
+        if (run == 0):
             midi_file_out.write_Composition("output/output.midi", output_composition)
         else:
             midi_file_out.write_Composition("output/complete.midi", output_composition)
