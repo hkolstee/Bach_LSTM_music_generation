@@ -63,7 +63,11 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
 
     return(predicted_notes.astype(np.int32)[1:])
 
-def main():
+def main(argv):
+    if (argv == None or not(len(argv) == 1)):
+        print("Usage: python3 bach_inference.py *path/to/model.pth*")
+        sys.exit()
+    
     # define parameters used here
         # sliding window size
     window_size = 80
@@ -79,7 +83,7 @@ def main():
     # initialize model
     model = LSTM_model(input_size, output_size, hidden_size, num_layers, batch_size, conv_channels)
     # load model file, I use CPU, can be done on gpu
-    model.load_state_dict(torch.load("models/0_001.pth", map_location=torch.device("cpu")))
+    model.load_state_dict(torch.load(argv[0], map_location=torch.device("cpu")))
 
     # load data, 4 voices of instruments
     voices = np.loadtxt("input.txt")
@@ -113,4 +117,5 @@ if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
     np.set_printoptions(threshold=sys.maxsize)
     np.set_printoptions(precision=3)
-    main()
+    
+    main(sys.argv[1:])
