@@ -64,7 +64,7 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
     return(predicted_notes.astype(np.int32)[1:])
 
 def main(argv):
-    if (argv == None or not(len(argv) == 1)):
+    if (argv == None or len(argv) != 1):
         print("Usage: python3 bach_inference.py *path/to/model.pth*")
         sys.exit()
     
