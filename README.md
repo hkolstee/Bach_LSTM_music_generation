@@ -54,9 +54,19 @@ The data was standardized, making sure no information leaks occured. The scaler 
 
 We found the dataset to be too small, with the test data being not representative of the train data (features learned in train data did not generalize well to test data), resulting in models extracted using early stopping not generating good results.
 
-The lowest test losses occured quickly after the start of training, meaning the models overfit quickly. Even when using really small models (~8/16 hidden units, 1/2 conv layers with 8 channels, subsential dropouts and regularization) the models quickly overfit. Larger models sometimes achieved even lower test loss, but overfit thereafter quickly. It seemed that the current configuration of test/train split was not working as well as I would have liked. 
+The lowest test losses occured quickly after the start of training, meaning the models overfit quickly. Even when using really small models (~8/16 hidden units, 1/2 conv layers with 8 channels, subsential dropouts) the models quickly overfit. Larger models sometimes achieved even lower test loss, but overfit thereafter quickly. It seemed that the current configuration of test/train split was not working as well as I would have liked. 
 
-The next step I took was making a model with a large sliding window of 80 notes, with a large double LSTM layer of 256 units. My thought process was, as I couldn't rely as well on the test loss as I would've liked, I would train a substentially sized network and keep the complexity in check using dropout and weight decay/l2 regularization. The dropout was tuned by running different dropout frequencies and subjectively judging the generated music. I trained the model using google colab to a small training loss, and used this to generate bach-like music, which for the first time resulted in generated music that sounded like actual music. The outputs of different tests can be found in ***/output/...***.
+The next step I took was making a models with a large sliding window of 80 notes, and playing around with a large double LSTM layers of 128 and 256 units. My thought process was, as I couldn't rely as well on the test loss as I would've liked, I would train a substentially sized network (to prevent underspecification) and keep the complexity in check using dropout and weight decay/l2 regularization. 
+
+I also found a paper of which the experimental results find that the number of parameters is not a good indication of whether a model will overfit: 
+
+<span style="color:yellow"> *"Zhang, C., Bengio, S., Hardt, M., Recht, B., & Vinyals, O. (2016). Understanding deep learning requires rethinking generalization. ArXiv. https://arxiv.org/abs/1611.03530"* </span>
+
+regularization was tuned by choosing different amounts of dropout frequency between the LSTM layers and different weight decay parameter values. Additionally, dropout between the convolutional layers was added. This convolutional dropout was not tuned (kept at 0.1) and based on the paper: 
+
+<span style="color:yellow"> *"Park, S., Kwak, N. (2017). Analysis on the Dropout Effect in Convolutional Neural Networks. In: Lai, SH., Lepetit, V., Nishino, K., Sato, Y. (eds) Computer Vision – ACCV 2016. ACCV 2016. Lecture Notes in Computer Science(), vol 10112. Springer, Cham. https://doi.org/10.1007/978-3-319-54184-6_12"* </span>
+
+Subsequently, I subjectively judging the generated music by listening to it. Mostly, I listened paid attention to the point where the model continued where bach left off, before it could fall back into patterns it had learned, so to judge the generaliztion capacity of the model. I trained the model using google colab to a small training loss, and used this to generate bach-like music, which for the first time resulted in generated music that sounded like actual music. The outputs of different tests can be found in ***/output/...***.
 
 ## Conclusion
 The dataset size and current train/test split configuration are not sufficient for good test evaluation.
@@ -68,4 +78,6 @@ Therefore, the logical next step making a well generalizing bach music generatio
 The goal of this project was to finish the bach fugue, and eventhough the model is overfit compared to our test set, the generated music sounds pretty good. The model starts off really well, but gets in trouble after a while. However, the parts where you can here the model struggle still sounds greatly better than the models with the lowest test loss. Probably, there are small sections which are very similar to the training music after prediction by the model, but I am not sure if I have a problem with that in this context of the Santa Fe competition. 
 
 Additionally, good musical knowledge + postprocessing/sampling of output of the lstm wouldn't hurt.
+
+## best ouput is **best_output.mp3**, which starts where bach left off.
 
