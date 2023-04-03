@@ -70,7 +70,7 @@ def main(argv):
     
     # define parameters used here
         # sliding window size
-    window_size = 80
+    window_size = 124
     hidden_size = 256
     conv_channels = 8
     input_size = 4
