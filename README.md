@@ -14,6 +14,15 @@ The unfinished fugue in question: ***Contrapunctus XIV: https://www.youtube.com/
 
 An original source paper: ***santa_fe_competition.pdf***
 
+## Original and ouput:
+Original:  
+
+https://user-images.githubusercontent.com/38500350/229805854-eba986c3-5d25-42fe-96d8-20980ab89931.mp4
+
+Model continued generation:
+
+https://user-images.githubusercontent.com/38500350/229806890-3ab24e08-6df6-4eb7-90f6-4d769d4bd1b2.mp4
+
 ## Data:
 Given is a text file (input.txt) which consist of 4 sequences of integer numbers representing the 4 different voices of the fugue (voices = individual parts of the music piece played simultaniously). The integer numbers represent the pitch of the voice at that current point in time. When the pitch stays the same for multiple steps in time for a single voice, the pitch is supposed to be played for the entire duration. Every timestep is 1/16th of a bar.
 
