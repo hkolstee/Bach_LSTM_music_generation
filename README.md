@@ -14,7 +14,7 @@ The unfinished fugue in question: ***Contrapunctus XIV: https://www.youtube.com/
 
 An original source paper: ***santa_fe_competition.pdf***
 
-## Original and ouput:
+## Original and LSTM model ouput:
 Original:  
 
 https://user-images.githubusercontent.com/38500350/229805854-eba986c3-5d25-42fe-96d8-20980ab89931.mp4
