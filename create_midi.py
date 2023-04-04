@@ -15,7 +15,9 @@ def main():
     original = np.loadtxt("input.txt")
 
     # load network output music
+    # output = np.loadtxt("output/output.txt")
     output = np.loadtxt("output/output.txt")
+
 
     # concatenate
     complete = np.concatenate((original, output), axis = 0)

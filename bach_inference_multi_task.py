@@ -2,6 +2,8 @@ import numpy as np
 import math
 import sys
 
+from tqdm import tqdm
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -23,7 +25,7 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
     # prepare input
     input = torch.tensor(input, dtype=torch.float32).unsqueeze(0)
     with torch.no_grad():
-        for i in range(steps):
+        for i in tqdm(range(steps)):
             # print(input.shape)
             pred1, pred2, pred3, pred4 = lstm_model(input, stateful=False)
             # print(output)
@@ -62,7 +64,7 @@ def main(argv):
     
     # define parameters used here
         # sliding window size
-    window_size = 96
+    window_size = 300
     hidden_size = 256
     input_size = 4
     output_size = [22, 27, 23, 26]
@@ -96,7 +98,7 @@ def main(argv):
 
     # take last sliding window in data and infer from there
     input = train_voices[-window_size:]
-    steps = 1500
+    steps = 500
     new_music = predictNextNotes(input, steps, model, voices, scaler)
 
     # save new music
