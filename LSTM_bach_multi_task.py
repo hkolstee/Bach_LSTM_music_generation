@@ -347,13 +347,13 @@ def main():
     # Loop through different combinations of the hyperparameters
     for run_id, (window_size, hidden_size, nr_layers, l2) in enumerate(hyperparam_value_sets):
         # tensorboard summary writer
-        writer = SummaryWriter(f'drive/MyDrive/colab_outputs/lstm_bach/runs/window_size={window_size} hidden_size={hidden_size}')
+        writer = SummaryWriter(f'drive/MyDrive/colab_outputs/lstm_bach/runs/window_size={window_size} hidden_size={hidden_size} l2={l2}')
         
         # Split data in train and test, scale, create datasets and create dataloaders
         train_loader, test_loader = createTrainTestDataloaders(voices, split_size, window_size, batch_size)
 
         # some informational print statements
-        print("\nNew run window/hidden/batch_size:", window_size, "/", hidden_size, "/", batch_size)
+        print("\nNew run window/hidden/l2/batch_size:", window_size, "/", hidden_size, "/", l2, "/", batch_size)
         data = next(iter(train_loader))
         print("Input size:", data["x"].size(), 
             "- Output size:[", data["y1"].size(), data["y2"].size(), data["y3"].size(), data["y4"].size(), "]\n",
