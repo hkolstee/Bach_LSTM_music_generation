@@ -36,7 +36,7 @@ example (step 1251-1266):
 66	54	52	47 <br>
 66	54	52	47 <br>
 
-## Model architecture (```LSTM_bach.ipynb / LSTM_bach.py```)
+## Model architecture (```LSTM_bach_multi_task.ipynb / LSTM_bach_multi_task.py```)
 The model consist of a double LSTM layer, followed by four heads, one for the prediction of the next note of each voice.
 
 ### Hyperparameter testing
