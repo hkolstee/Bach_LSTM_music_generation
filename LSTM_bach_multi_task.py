@@ -239,7 +239,7 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
         if (train_loss < lowest_train_loss):
             lowest_train_loss = train_loss
             # Save model
-            torch.save(model.state_dict(), "drive/MyDrive/colab_outputs/lstm_bach/models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + ".pth")
+            torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + ".pth")
 
         # Test evaluation
         if (test_loader):
@@ -263,7 +263,7 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
             # if lowest till now, save model (checkpointing)
             if (test_loss < lowest_test_loss):
                 lowest_test_loss = test_loss
-                torch.save(model.state_dict(), "drive/MyDrive/colab_outputs/lstm_bach/models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + "test" + ".pth")
+                torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + "test" + ".pth")
 
         # before next epoch: add last epoch info to progress bar
         progress_bar.set_postfix({"train_loss": train_loss, "test_loss": test_loss})
