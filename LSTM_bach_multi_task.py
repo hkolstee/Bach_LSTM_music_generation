@@ -338,13 +338,14 @@ def main():
     hyperparams = dict(
         window_size = [96],
         hidden_size = [256],
-        nr_layers = [2]
+        nr_layers = [2],
+        l2 = [0.07]
     )
     # sets of combinations of hparams
     hyperparam_value_sets = product(*[value for value in hyperparams.values()])
 
     # Loop through different combinations of the hyperparameters
-    for run_id, (window_size, hidden_size, nr_layers) in enumerate(hyperparam_value_sets):
+    for run_id, (window_size, hidden_size, nr_layers, l2) in enumerate(hyperparam_value_sets):
         # tensorboard summary writer
         writer = SummaryWriter(f'drive/MyDrive/colab_outputs/lstm_bach/runs/window_size={window_size} hidden_size={hidden_size}')
         
@@ -369,7 +370,7 @@ def main():
         #   Output of each head is multi-class classification -> cross entropy
         loss_func = nn.CrossEntropyLoss()
         # AdamW = Adam with fixed weight decay (weight decay performed after controlling parameter-wise step size)
-        optimizer = optim.AdamW(lstm_model.parameters(), lr=0.001, weight_decay=0.01)
+        optimizer = optim.AdamW(lstm_model.parameters(), lr=0.001, weight_decay=l2)
         scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=750)
         
         # to gpu if possible
