@@ -17,6 +17,8 @@ from sklearn.preprocessing import StandardScaler
 
 from tensorboard.plugins.hparams import api as hp
 
+from augmentation import createEncodedData
+
 from tqdm import tqdm
 
 # gpu if available (global variable for convenience)
@@ -68,26 +70,28 @@ def one_hot_encode(y: np.ndarray, voices: np.ndarray) -> np.ndarray:
     # print(one_hot_voice1.shape, one_hot_voice2.shape, one_hot_voice3.shape, one_hot_voice4.shape)
     return one_hot_voice1, one_hot_voice2, one_hot_voice3, one_hot_voice4
 
-# set_voices and all_voices used when creating a subset of all data for the current dataset (train/test)
-# necessary for one-hot encoding of test data
+# encoded voices used as input data (x), non_encoded_voices as target data (y), 
+#   voices used to one hot encode (necessary for nr of uniques in data), 
+#   as encoded and non_encoded is a train/test subset of the complete set and might miss some unique values 
 class NotesDataset(Dataset):
-    def __init__(self, window_size: int, subset_voices:np.ndarray, all_voices: np.ndarray):
+    def __init__(self, window_size: int, encoded_voices:np.ndarray, non_encoded_voices:np.ndarray, voices: np.ndarray):
         # nr of samples, and nr of voices
-        self.nr_samples = subset_voices.shape[0] - window_size
-        self.nr_voices = subset_voices.shape[1]
+        self.nr_samples = encoded_voices.shape[0] - window_size
+        self.input_width = encoded_voices.shape[1]
+        self.output_width = voices.shape[1]
 
-        # initialize x data -> window_size amount of notes of 4 voices each per prediction
-        self.x = np.zeros((self.nr_samples, window_size, self.nr_voices), dtype=np.float32)
+        # initialize x data -> window_size amount of notes of 4 (=20 when encoded) voices each per prediction
+        self.x = np.zeros((self.nr_samples, window_size, self.input_width), dtype=np.float32)
         for i in range(self.x.shape[0]):
-            self.x[i] = subset_voices[i : i + window_size]
+            self.x[i] = encoded_voices[i : i + window_size]
 
         # initialize y data -> 4 following target notes per time window 
-        self.y = np.zeros((self.nr_samples, self.nr_voices), dtype = np.float32)
+        self.y = np.zeros((self.nr_samples, self.output_width), dtype = np.float32)
         for j in range(self.y.shape[0]):
-            self.y[j] = subset_voices[j + window_size]
+            self.y[j] = non_encoded_voices[j + window_size]
 
         # one hot encode different task (differnt voices) target values
-        self.y1, self.y2, self.y3, self.y4 = one_hot_encode(self.y, all_voices)
+        self.y1, self.y2, self.y3, self.y4 = one_hot_encode(self.y, voices)
 
         # create tensors
         self.x = torch.from_numpy(self.x).to(device)
@@ -119,6 +123,7 @@ class LSTM_model(nn.Module):
         self.head1 = nn.Sequential(OrderedDict(
             [('linear', nn.Linear(hidden_size, hidden_size)),
              ('relu', nn.ReLU()),
+             ('dropout', nn.Dropout(0.5)),
              ('final', nn.Linear(hidden_size, output_sizes[0]))]
         ))
 
@@ -126,6 +131,7 @@ class LSTM_model(nn.Module):
         self.head2 = nn.Sequential(OrderedDict(
             [('linear', nn.Linear(hidden_size, hidden_size)),
              ('relu', nn.ReLU()),
+             ('dropout', nn.Dropout(0.5)),
              ('final', nn.Linear(hidden_size, output_sizes[1]))]
         ))
 
@@ -133,6 +139,7 @@ class LSTM_model(nn.Module):
         self.head3 = nn.Sequential(OrderedDict(
             [('linear', nn.Linear(hidden_size, hidden_size)),
              ('relu', nn.ReLU()),
+             ('dropout', nn.Dropout(0.5)),
              ('final', nn.Linear(hidden_size, output_sizes[2]))]
         ))
 
@@ -140,6 +147,7 @@ class LSTM_model(nn.Module):
         self.head4 = nn.Sequential(OrderedDict(
             [('linear', nn.Linear(hidden_size, hidden_size)),
              ('relu', nn.ReLU()),
+             ('dropout', nn.Dropout(0.5)),
              ('final', nn.Linear(hidden_size, output_sizes[3]))]
         ))
 
@@ -184,7 +192,6 @@ class LSTM_model(nn.Module):
             task_head4_out = self.head4(out[:,-1,:])
 
         return task_head1_out, task_head2_out, task_head3_out, task_head4_out
-
 def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, optimizer, loss_func, scheduler, stateful, writer):
     # lowest train/test loss, train/test loss lists
     lowest_train_loss = np.inf
@@ -240,6 +247,7 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
             lowest_train_loss = train_loss
             # Save model
             torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + ".pth")
+            # torch.save(model.state_dict(), "drive/MyDrive/colab_outputs/lstm_bach/models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + ".pth")
 
         # Test evaluation
         if (test_loader):
@@ -264,13 +272,14 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
             if (test_loss < lowest_test_loss):
                 lowest_test_loss = test_loss
                 torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + "test" + ".pth")
+                # torch.save(model.state_dict(), "drive/MyDrive/colab_outputs/lstm_bach/models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + "test" + ".pth")
 
         # before next epoch: add last epoch info to progress bar
         progress_bar.set_postfix({"train_loss": train_loss, "test_loss": test_loss})
 
     # save hparams along with lowest train/test losses
     writer.add_hparams(
-        {"window_size": train_loader.dataset.x.shape[1], "hidden_size": model.hidden_size},
+        {"window_size": train_loader.dataset.x.shape[1], "hidden_size": model.hidden_size, "conv_channels": model.conv_channels},
         {"MinTrainLoss": lowest_train_loss, "MinTestLoss": lowest_test_loss},
     )
 
@@ -279,25 +288,27 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
 # create train and test dataset based on window size where one window of timesteps
 #   will predict the subsequential single timestep
 # Data is created without any information leak between test/train (either scaling leak or time leak)
-def createTrainTestDataloaders(voices, split_size, window_size, batch_size):
+def createTrainTestDataloaders(voices, encoded_voices, split_size, window_size, batch_size):
     # Train/test split
-    dataset_size = len(voices[:,])
+    dataset_size = voices.shape[0]
     indices = list(range(dataset_size))
     split = int(np.floor((1 - split_size) * dataset_size))
     train_indices, test_indices = indices[:split], indices[split:]
 
-    # create split in data
-    train_voices = voices[train_indices, :]
-    test_voices = voices[test_indices, :]
+    # create split in data, using encoded data for x (input), and non encoded for y (target)
+    train_voices_x = encoded_voices[train_indices, :]
+    train_voices_y = voices[train_indices, :]
+    test_voices_x = encoded_voices[test_indices, :]
+    test_voices_y = voices[test_indices, :]
     
     # scale both sets, using training data as fit (no leaks)
     scaler = StandardScaler()
-    scaler.fit(train_voices)
-    train_voices = scaler.transform(train_voices)
-    all_voices = scaler.transform(voices)
+    scaler.fit(train_voices_x)
+    train_voices_x = scaler.transform(train_voices_x)
+    # all_voices = scaler.transform(voices)
     
     # create train dataset
-    train_dataset = NotesDataset(window_size, train_voices, all_voices)
+    train_dataset = NotesDataset(window_size, train_voices_x, train_voices_y, voices)
 
     # create train dataloader
     train_loader = DataLoader(train_dataset, batch_size)
@@ -305,9 +316,9 @@ def createTrainTestDataloaders(voices, split_size, window_size, batch_size):
     # Do the same for test set 
     if (split_size > 0):
         # scale test set
-        test_voices = scaler.transform(test_voices)
+        test_voices_x = scaler.transform(test_voices_x)
         # create test dataset
-        test_dataset = NotesDataset(window_size, test_voices, all_voices)
+        test_dataset = NotesDataset(window_size, test_voices_x, test_voices_y, voices)
         # create test dataloader
         test_loader = DataLoader(test_dataset, batch_size)
     else:
@@ -324,11 +335,14 @@ def main():
     voices = np.delete(voices, slice(8), axis=0)
     print("Data shape (4 voices):", voices.shape)
 
+    # encode data with additional harmonic information
+    encoded_voices = createEncodedData(voices)
+
     # batch_size for training network
-    batch_size = 64
+    batch_size = 16
 
     # split size of test/train data
-    split_size = 0.0
+    split_size = 0.1
 
     # hyperparameters for fine-tuning
         # window_size = sliding window on time-sequence data for input
@@ -336,10 +350,10 @@ def main():
         # conv_channels = number of channels in the first conv layer (multiplied by 2 every next layer)
         # nr_layers = number of lstm layers stacked after each other
     hyperparams = dict(
-        window_size = [96],
-        hidden_size = [256],
+        window_size = [16],
+        hidden_size = [16],
         nr_layers = [2],
-        l2 = [0.07]
+        l2 = [0.001, 0.01]
     )
     # sets of combinations of hparams
     hyperparam_value_sets = product(*[value for value in hyperparams.values()])
@@ -347,10 +361,11 @@ def main():
     # Loop through different combinations of the hyperparameters
     for run_id, (window_size, hidden_size, nr_layers, l2) in enumerate(hyperparam_value_sets):
         # tensorboard summary writer
-        writer = SummaryWriter(f'drive/MyDrive/colab_outputs/lstm_bach/runs/window_size={window_size} hidden_size={hidden_size} l2={l2}')
+        writer = SummaryWriter(f'runs/E_window_size={window_size}_hidden_size={hidden_size}_l2={l2}')
+        # writer = SummaryWriter(f'drive/MyDrive/colab_outputs/lstm_bach/runs/window_size={window_size} hidden_size={hidden_size}')
         
         # Split data in train and test, scale, create datasets and create dataloaders
-        train_loader, test_loader = createTrainTestDataloaders(voices, split_size, window_size, batch_size)
+        train_loader, test_loader = createTrainTestDataloaders(voices, encoded_voices, split_size, window_size, batch_size)
 
         # some informational print statements
         print("\nNew run window/hidden/l2/batch_size:", window_size, "/", hidden_size, "/", l2, "/", batch_size)
@@ -360,7 +375,7 @@ def main():
             "TRAIN batches:", len(train_loader), 
             "- TEST batches:", len(test_loader) if test_loader else "Not available")
         # Input/output dimensions
-        input_size = voices.shape[1]
+        input_size = encoded_voices.shape[1]
         output_sizes = [data["y1"].size(1), data["y2"].size(1), data["y3"].size(1), data["y4"].size(1)]
 
         # create model
@@ -371,13 +386,14 @@ def main():
         loss_func = nn.CrossEntropyLoss()
         # AdamW = Adam with fixed weight decay (weight decay performed after controlling parameter-wise step size)
         optimizer = optim.AdamW(lstm_model.parameters(), lr=0.001, weight_decay=l2)
-        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=750)
+        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.5, total_iters=750)
         
         # to gpu if possible
         lstm_model = lstm_model.to(device)
         
         # training loop
         epochs = 1000
+        
         # In this example we should not use a stateful lstm, as the next samples (subsequent sliding windows) do not follow directly from the current.
         # This is only the case when the first sample is (for Ex.) [1:10] which is the first window, and [11:20] the next, and so on.
         # With our data it would be: [1:10] and the next [2:11]. Target value does not matter necessarily. 

@@ -45,6 +45,9 @@ example (step 1251-1266):
 66	54	52	47 <br>
 66	54	52	47 <br>
 
+## Data augmentation:
+Each note is representated in a scaled pitch, the representation of the note in the circle of fifths, and the representation of the note in the chroma circle. These two circles give additional information about the note in terms of harmony, and how much notes differ. Thus, one note is expanded with four more features.
+
 ## Model architecture (```LSTM_bach_multi_task.ipynb / LSTM_bach_multi_task.py```)
 The model consist of a double LSTM layer, followed by four heads, one for the prediction of the next note of each voice.
 
@@ -52,6 +55,7 @@ The model consist of a double LSTM layer, followed by four heads, one for the pr
 The following hyperparameters were all tested (as this was my introduction to LSTMs):
 - window size: [32, 64, 96]
 - lstm hidden units: [8, 24, 64, 128]
+- l2 regularization: [0.001, 0.005, 0.01]
 - number of stacked lstm layers: [1, 2] (after other params)
 
 These configurations were run for 100 epochs to determine train/test trajectory.
@@ -64,7 +68,7 @@ We found the dataset to be too small, with the test data being not representativ
 
 I started off with a different model architecture, namely by adding two or three convolutional layers before the lstm. I found out the hard way that adding convolutions in a timeseries prediction tasks like this one, where the very important last notes (right before predicted notes) are located on the edges of the input, are therefore blurred by the convolution, making the model perform worse. After this lesson I performed a multi-task approach. The other model can be found in **first_bad_attempt_conv_to_lstm/**.  
 
-The lowest test losses occured quickly after the start of training, meaning the models overfit quickly. Even when using really small models (~8/16 hidden units, subsential dropouts) the models quickly overfit. Larger models sometimes achieved even lower test loss, but overfit thereafter quickly. It seemed that the current configuration of test/train split was not working as well as I would have liked.  
+The lowest test losses occured quickly after the start of training, meaning the models overfit quickly. Even when using really small models (~8/16 hidden units, subsential dropouts) the models quickly overfit. Larger models sometimes achieved lower test loss, but overfit thereafter quickly. It seemed that the current configuration of test/train split was not working as well as I would have liked.  
 
 The next step I took was making a models with a large sliding window of 80 notes, and playing around with a large double LSTM layers of 128 and 256 units. My thought process was, as I couldn't rely as well on the test loss as I would've liked, I would train a substentially sized network (to prevent underspecification) and keep the complexity in check using dropout and weight decay/l2 regularization. 
 

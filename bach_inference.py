@@ -1,6 +1,6 @@
 import numpy as np
-import math
 import sys
+import os
 
 from tqdm import tqdm
 
@@ -11,6 +11,8 @@ import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 
 from LSTM_bach import LSTM_model, NotesDataset
+
+from augmentation import createEncodedData
 
 def predictNextNotes(input, steps, lstm_model, voices, scaler):
     # predicted notes
@@ -34,25 +36,25 @@ def predictNextNotes(input, steps, lstm_model, voices, scaler):
             pred3 = pred3.detach().numpy().squeeze()
             pred4 = pred4.detach().numpy().squeeze()
 
-            # get the indices with highest value from model forward output
+            # get the notes of the indices with highest value from model forward output
             note_voice1 = unique_voice1[np.argmax(pred1)]
             note_voice2 = unique_voice2[np.argmax(pred2)]
             note_voice3 = unique_voice3[np.argmax(pred3)]
             note_voice4 = unique_voice4[np.argmax(pred4)]
             # print(note_voice1, note_voice2, note_voice3, note_voice4)
 
-            # add to array and inverse scale
-            next_notes = np.array([note_voice1, note_voice2, note_voice3, note_voice4])
-            next_notes_invscaled = scaler.inverse_transform(next_notes.reshape(1, -1))
-            # print(next_notes_invscaled)
-            predicted_notes = np.concatenate((predicted_notes, next_notes_invscaled), axis = 0)
-            # print(predicted_notes)
+            # add to array
+            next_notes = np.array([[note_voice1, note_voice2, note_voice3, note_voice4]])
+            predicted_notes = np.concatenate((predicted_notes, next_notes), axis = 0)
 
             # change input
             # drop oldest notes
             input = input[0][1:]
+            # encode and scale
+            next_notes = createEncodedData(next_notes)
+            next_notes = scaler.transform(next_notes)
             # concat predicted notes
-            input = torch.cat((input, torch.Tensor(next_notes).unsqueeze(0)))
+            input = torch.cat((input, torch.Tensor(next_notes)))
             input = input.unsqueeze(0)
 
     return(predicted_notes.astype(np.int32)[1:])
@@ -64,9 +66,9 @@ def main(argv):
     
     # define parameters used here
         # sliding window size
-    window_size = 1000
-    hidden_size = 256
-    input_size = 4
+    window_size = 100
+    hidden_size = 128
+    input_size = 20
     output_size = [22, 27, 23, 26]
     num_layers = 2
         # train/test split, to continue predicting
@@ -81,28 +83,33 @@ def main(argv):
     # load data, 4 voices of instruments
     voices = np.loadtxt("input.txt")
 
+    # encode voices
+    encoded_voices = createEncodedData(voices)
+
     # Train/test split (needed for correct scaling of new data)
-    dataset_size = len(voices[:,])
+    dataset_size = voices.shape[0]
     indices = list(range(dataset_size))
     split = int(np.floor((1 - split_size) * dataset_size))
     train_indices = indices[:split]
     # create split in data
-    train_voices = voices[train_indices, :]
+    train_voices = encoded_voices[train_indices, :]
 
     # fit the scaler to the train data
     scaler = StandardScaler()
     scaler.fit(train_voices)
     # scale voices
-    voices = scaler.transform(voices)
+    # voices = scaler.transform(voices)
     train_voices = scaler.transform(train_voices)
 
     # take last sliding window in data and infer from there
     input = train_voices[-window_size:]
-    steps = 1500
+    steps = 1000
     new_music = predictNextNotes(input, steps, model, voices, scaler)
 
     # save new music
-    np.savetxt(fname = "output/output.txt", X = new_music, fmt = "%d")
+    model_name = argv[0].replace("models/", "")
+    os.makedirs("output/" + model_name)
+    np.savetxt(fname = "output/" + model_name + "/output.txt", X = new_music, fmt = "%d")
 
 if __name__ == '__main__':
     torch.set_printoptions(threshold=sys.maxsize)

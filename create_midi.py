@@ -1,10 +1,20 @@
 import numpy as np
+
+import sys
+
 from mingus.containers import Note
 from mingus.midi import fluidsynth
 from mingus.containers import Bar, Track, Composition
 from mingus.midi import midi_file_out
 
-def main():
+def main(argv):
+    if (argv == None or len(argv) != 1):
+        print("Usage: python3 create_midi.py *path/to/output.txt*")
+        sys.exit()
+    # replace models directory when running from shell script create_mp3.sh
+    model_name = argv[0].replace("models/", "")
+    model_name = model_name.replace("/output.txt", "")
+
     # initialize soundfont file that will be used to play music
     # fluidsynth.init("soundfonts/YamahaC5Grand-v2_4.sf2", "oss")
     fluidsynth.init("soundfonts/040_Florestan_String_Qraurtet.sf2", "oss")
@@ -16,7 +26,7 @@ def main():
 
     # load network output music
     # output = np.loadtxt("input.txt")
-    output = np.loadtxt("output/output.txt")
+    output = np.loadtxt("output/" + model_name + "/output.txt")
 
 
     # concatenate
@@ -81,4 +91,4 @@ def main():
             midi_file_out.write_Composition("output/complete.midi", output_composition)
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
