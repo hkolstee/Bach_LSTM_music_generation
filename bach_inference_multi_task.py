@@ -64,7 +64,7 @@ def main(argv):
     
     # define parameters used here
         # sliding window size
-    window_size = 300
+    window_size = 1000
     hidden_size = 256
     input_size = 4
     output_size = [22, 27, 23, 26]
@@ -98,7 +98,7 @@ def main(argv):
 
     # take last sliding window in data and infer from there
     input = train_voices[-window_size:]
-    steps = 500
+    steps = 1500
     new_music = predictNextNotes(input, steps, model, voices, scaler)
 
     # save new music
