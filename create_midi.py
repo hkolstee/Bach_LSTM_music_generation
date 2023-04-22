@@ -15,12 +15,15 @@ def main():
     original = np.loadtxt("input.txt")
 
     # load network output music
+    # output = np.loadtxt("input.txt")
     output = np.loadtxt("output/output.txt")
+
 
     # concatenate
     complete = np.concatenate((original, output), axis = 0)
 
     # create midi for output and comlete (original + output)
+    # for run, voices in enumerate([output]):
     for run, voices in enumerate([output, complete]):
         # create 4 tracks for the 4 voices
         encoded_voices = [Track(), Track(), Track(), Track()] 

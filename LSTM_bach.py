@@ -2,6 +2,7 @@ import numpy as np
 import math
 import sys
 import time
+from collections import OrderedDict
 
 from itertools import product
 
@@ -40,10 +41,12 @@ def one_hot_encode(y: np.ndarray, voices: np.ndarray) -> np.ndarray:
     unique_voice2 = np.unique(voices[:,1])
     unique_voice3 = np.unique(voices[:,2])
     unique_voice4 = np.unique(voices[:,3])
-    total = len(unique_voice1) + len(unique_voice2) + len(unique_voice3) + len(unique_voice4)
 
-    # initialize return array
-    encoded = np.zeros((y.shape[0], total), dtype=np.float32)
+    # initialize return arrays
+    one_hot_voice1 = np.zeros((y.shape[0], len(unique_voice1)), dtype=np.float32)
+    one_hot_voice2 = np.zeros((y.shape[0], len(unique_voice2)), dtype=np.float32)
+    one_hot_voice3 = np.zeros((y.shape[0], len(unique_voice3)), dtype=np.float32)
+    one_hot_voice4 = np.zeros((y.shape[0], len(unique_voice4)), dtype=np.float32)
     
     # one hot encode each note
     for timestep, notes in enumerate(y):
@@ -51,18 +54,19 @@ def one_hot_encode(y: np.ndarray, voices: np.ndarray) -> np.ndarray:
             if (voice == 0):
                 # get location in uniques of current note
                 one_hot_location = uniqueLocation(unique_voice1, note)
-                encoded[timestep][one_hot_location] = 1
+                one_hot_voice1[timestep][one_hot_location] = 1
             elif (voice == 1):
                 one_hot_location = uniqueLocation(unique_voice2, note)
-                encoded[timestep][one_hot_location + len(unique_voice1)] = 1
+                one_hot_voice2[timestep][one_hot_location] = 1
             elif (voice == 2):
                 one_hot_location = uniqueLocation(unique_voice3, note)
-                encoded[timestep][one_hot_location + len(unique_voice1) + len(unique_voice2)] = 1
+                one_hot_voice3[timestep][one_hot_location] = 1
             elif (voice == 3):
                 one_hot_location = uniqueLocation(unique_voice4, note)
-                encoded[timestep][one_hot_location + len(unique_voice1) + len(unique_voice2) + len(unique_voice3)] = 1
+                one_hot_voice4[timestep][one_hot_location] = 1
 
-    return encoded
+    # print(one_hot_voice1.shape, one_hot_voice2.shape, one_hot_voice3.shape, one_hot_voice4.shape)
+    return one_hot_voice1, one_hot_voice2, one_hot_voice3, one_hot_voice4
 
 # set_voices and all_voices used when creating a subset of all data for the current dataset (train/test)
 # necessary for one-hot encoding of test data
@@ -82,60 +86,64 @@ class NotesDataset(Dataset):
         for j in range(self.y.shape[0]):
             self.y[j] = subset_voices[j + window_size]
 
-        # one hot encode target tensor
-        self.y = one_hot_encode(self.y, all_voices)
+        # one hot encode different task (differnt voices) target values
+        self.y1, self.y2, self.y3, self.y4 = one_hot_encode(self.y, all_voices)
 
         # create tensors
         self.x = torch.from_numpy(self.x).to(device)
-        self.y = torch.from_numpy(self.y).to(device)
+        self.y1 = torch.from_numpy(self.y1).to(device)
+        self.y2 = torch.from_numpy(self.y2).to(device)
+        self.y3 = torch.from_numpy(self.y3).to(device)
+        self.y4 = torch.from_numpy(self.y4).to(device)
 
     def __getitem__(self, index: int):
-        return self.x[index], self.y[index]
+        sample = {'x': self.x[index], 'y1': self.y1[index], 'y2': self.y2[index], 'y3': self.y3[index], 'y4': self.y4[index]}
+        return sample
 
     def __len__(self):
         return self.nr_samples
-
-# LSTM model with three conv layers
+    
+# LSTM model with four output heads, one for each voice next note prediction (task)
 # The model can be set to stateful, meaning the internal hidden state and cell state is passed
 #   into the model each batch and reset once per epoch.
 class LSTM_model(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, num_layers, batch_size, channels):
+    def __init__(self, input_size, output_sizes, hidden_size, num_layers, batch_size):
         super(LSTM_model, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.conv_channels = channels
 
-        # ReLU activation function
-        self.relu = nn.ReLU()
+        # lstm layer(s)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, dropout=0.2, batch_first=True)
+        
+        # task head: voice 1
+        self.head1 = nn.Sequential(OrderedDict(
+            [('linear', nn.Linear(hidden_size, hidden_size)),
+             ('relu', nn.ReLU()),
+             ('final', nn.Linear(hidden_size, output_sizes[0]))]
+        ))
 
-        # dropout layer
-        self.dropout = nn.Dropout(0.25) 
+        # task head: voice 2
+        self.head2 = nn.Sequential(OrderedDict(
+            [('linear', nn.Linear(hidden_size, hidden_size)),
+             ('relu', nn.ReLU()),
+             ('final', nn.Linear(hidden_size, output_sizes[1]))]
+        ))
 
-        # first conv layer
-        padding = 1
-        kernel_conv2d = 2
-        c_out = channels
-        lstm_input_size = input_size - kernel_conv2d + (2 * padding) + 1
-        self.conv2d_1 = nn.Conv2d(1, c_out, kernel_size = kernel_conv2d, padding = padding)
+        # task head: voice 3
+        self.head3 = nn.Sequential(OrderedDict(
+            [('linear', nn.Linear(hidden_size, hidden_size)),
+             ('relu', nn.ReLU()),
+             ('final', nn.Linear(hidden_size, output_sizes[2]))]
+        ))
 
-        # # second conv layer
-        padding = 1
-        kernel_conv2d += 1
-        c_out2 = c_out * 2
-        lstm_input_size = lstm_input_size - kernel_conv2d + (2 * padding) + 1
-        self.conv2d_2 = nn.Conv2d(c_out, c_out2, kernel_size = kernel_conv2d, padding = padding)
+        # task head: voice 4
+        self.head4 = nn.Sequential(OrderedDict(
+            [('linear', nn.Linear(hidden_size, hidden_size)),
+             ('relu', nn.ReLU()),
+             ('final', nn.Linear(hidden_size, output_sizes[3]))]
+        ))
 
-        # third conv layer
-        padding = 1
-        kernel_conv2d += 1
-        c_out3 = c_out2 * 2
-        lstm_input_size = lstm_input_size - kernel_conv2d + (2 * padding) + 1
-        self.conv2d_3 = nn.Conv2d(c_out2, c_out3, kernel_size = kernel_conv2d, padding = padding)
-
-        self.lstm = nn.LSTM(c_out3 * lstm_input_size, hidden_size, num_layers, dropout=0.2, batch_first=True)
-        self.linear = nn.Linear(hidden_size, output_size)
-
-        print("LSTM initialized with {} input size, {} hidden layer size, {} number of LSTM layers, and an output size of {}".format(input_size, hidden_size, num_layers, output_size))
+        print("LSTM initialized with {} input size, {} hidden layer size, {} number of LSTM layers, and an output size of {}".format(input_size, hidden_size, num_layers, output_sizes))
         # reset states in case of stateless use
         self.reset_states(batch_size)
 
@@ -148,90 +156,81 @@ class LSTM_model(nn.Module):
         self.cn = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
 
     def forward(self, input, stateful):
-        # conv layer wont take it right now as it seems to have batch_size number of channels 
-        # [batch_size,window_size,4]->[batch_size,1,window_size,4]
-        input = input.unsqueeze(1)
-
-        # pass through first conv layer
-        out = self.conv2d_1(input)
-        out = self.relu(out)
-
-        # # dropout
-        out = self.dropout(out)
-
-        # # pass through second conv layer
-        out = self.conv2d_2(out)
-        out = self.relu(out)
-        
-        # # dropout
-        out = self.dropout(out)
-
-        # # # pass through third conv layer
-        out = self.conv2d_3(out)
-        out = self.relu(out)
-
-        # # reshape for the lstm
-        out = out.view(input.size(0), out.size(2), -1)
-
         # simple forward function
         # stateful = keep hidden states entire sequence length
+        # only use when 2 samples follow temporally (first timepoint from 2nd sample follows from last timepoint 1st sample)
         if stateful:
             # for last batch which might not be the same shape
             if (input.size(0) != self.hn.size(1)):
                 self.reset_states(input.size(0))
               
             # lstm layer
-            out, (self.hn, self.cn) = self.lstm(out, (self.hn.detach(), self.cn.detach())) 
-            # linear output layer
-            out = self.linear(out[:,-1,:])
+            out, (self.hn, self.cn) = self.lstm(input, (self.hn.detach(), self.cn.detach())) 
+            # linear output layers for each head
+            task_head1_out = self.head1(out[:,-1,:])
+            task_head2_out = self.head2(out[:,-1,:])
+            task_head3_out = self.head3(out[:,-1,:])
+            task_head4_out = self.head4(out[:,-1,:])
         else:
             # initiaze hidden and cell states
             hn = torch.zeros(self.num_layers,  input.size(0), self.hidden_size).to(device)
             cn = torch.zeros(self.num_layers, input.size(0), self.hidden_size).to(device)
             # lstm layer
-            out, (hn, cn) = self.lstm(out, (hn, cn))
-            # linear output layer
-            out = self.linear(out[:,-1,:])
+            out, (hn, cn) = self.lstm(input, (hn, cn))
+            # linear output layers for each head
+            task_head1_out = self.head1(out[:,-1,:])
+            task_head2_out = self.head2(out[:,-1,:])
+            task_head3_out = self.head3(out[:,-1,:])
+            task_head4_out = self.head4(out[:,-1,:])
 
-        return out
-
+        return task_head1_out, task_head2_out, task_head3_out, task_head4_out
 
 def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, optimizer, loss_func, scheduler, stateful, writer):
-    # lowest train/test loss
+    # lowest train/test loss, train/test loss lists
     lowest_train_loss = np.inf
     lowest_test_loss = np.inf
-    
+    train_losses = []
+    test_losses = []
+
+    # test_loss declaration untill assigned in model evaluation (used in progress bar print)
+    test_loss = "n/a"
+
     # training loop
-    for epoch in range(1, nr_epochs):
-        # reset running loss
-        running_loss_train = 0
-        running_loss_test = 0
+    for epoch in (progress_bar := tqdm(range(1, nr_epochs))):
+        # add epoch info to progress bar
+        progress_bar.set_description(f"Epoch {epoch}")
 
         # reset lstm hidden and cell state (stateful lstm = reset states once per sequence)
         # if not, reset automatically each forward call
         if stateful:
             model.reset_states(train_loader.batch_size)
-        
+
+        # reset running loss
+        running_loss_train = 0
+        running_loss_test = 0
+
         # train loop
         model.train()
-        for i, (inputs, labels) in enumerate(tqdm(train_loader)):
+        for i, data in enumerate(train_loader):
             # reset gradient function of weights
             optimizer.zero_grad()
             # forward
-            prediction = model(inputs, stateful)
+            voice1_pred, voice2_pred, voice3_pred, voice4_pred = model(data["x"], stateful)
             # calculate loss
-            loss = loss_func(prediction, labels)
+            loss = loss_func(voice1_pred, data["y1"]) + loss_func(voice2_pred, data["y2"]) + loss_func(voice3_pred, data["y3"]) + loss_func(voice4_pred, data["y4"])
             # backward, retain_graph = True needed for hidden lstm states
             loss.backward(retain_graph=True)
             # step
             optimizer.step()
             # add to running loss
             running_loss_train += loss.item()
+
         # learning rate scheduler step
         scheduler.step()
 
         # calc running loss
         train_loss = running_loss_train/len(train_loader)
+        train_losses.append(train_loss)
 
         # add loss to tensorboard
         writer.add_scalar("Running train loss", train_loss, epoch)        
@@ -240,21 +239,23 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
         if (train_loss < lowest_train_loss):
             lowest_train_loss = train_loss
             # Save model
-            torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + ".pth")
+            torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + ".pth")
 
         # Test evaluation
         if (test_loader):
-            model.eval()
+            # model.eval()
             with torch.no_grad():
-                for j, (inputs, labels) in enumerate(test_loader):
+                for j, data in enumerate(test_loader):
                     # forward pass
-                    prediction = model(inputs, stateful)
+                    voice1_pred, voice2_pred, voice3_pred, voice4_pred = model(data["x"], stateful)
                     # calculate loss
-                    test_loss = loss_func(prediction, labels)
+                    loss = loss_func(voice1_pred, data["y1"]) + loss_func(voice2_pred, data["y2"]) + loss_func(voice3_pred, data["y3"]) + loss_func(voice4_pred, data["y4"])
                     # add to running loss
+                    running_loss_test += loss
 
             # calc running loss
             test_loss = running_loss_test/len(test_loader)
+            test_losses.append(test_loss)
 
             # add test loss to tensorboard
             writer.add_scalar("Running test loss", test_loss, epoch)
@@ -262,13 +263,18 @@ def training(model, train_loader:DataLoader, test_loader:DataLoader, nr_epochs, 
             # if lowest till now, save model (checkpointing)
             if (test_loss < lowest_test_loss):
                 lowest_test_loss = test_loss
-                torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + str(model.conv_channels) + "test" + ".pth")
+                torch.save(model.state_dict(), "models/model" + str(train_loader.dataset.x.shape[1]) + str(model.hidden_size) + "test" + ".pth")
 
-        # print training running loss and add to tensorboard
-        print("Epoch:", epoch, "  Train loss:", train_loss,
-                                ", Test loss:", test_loss if test_loader else "Not available")
-    
-    return lowest_train_loss, lowest_test_loss
+        # before next epoch: add last epoch info to progress bar
+        progress_bar.set_postfix({"train_loss": train_loss, "test_loss": test_loss})
+
+    # save hparams along with lowest train/test losses
+    writer.add_hparams(
+        {"window_size": train_loader.dataset.x.shape[1], "hidden_size": model.hidden_size},
+        {"MinTrainLoss": lowest_train_loss, "MinTestLoss": lowest_test_loss},
+    )
+
+    return train_losses, test_losses
 
 # create train and test dataset based on window size where one window of timesteps
 #   will predict the subsequential single timestep
@@ -319,67 +325,68 @@ def main():
     print("Data shape (4 voices):", voices.shape)
 
     # batch_size for training network
-    batch_size = 32
+    batch_size = 64
 
     # split size of test/train data
-    split_size = 0.1
-    
+    split_size = 0.0
+
     # hyperparameters for fine-tuning
         # window_size = sliding window on time-sequence data for input
         # hidden_size = hidden units of lstm layer(s)
         # conv_channels = number of channels in the first conv layer (multiplied by 2 every next layer)
         # nr_layers = number of lstm layers stacked after each other
     hyperparams = dict(
-        window_size = [80],
+        window_size = [96],
         hidden_size = [256],
-        conv_channels = [8],
-        nr_layers = [2]
+        nr_layers = [2],
+        l2 = [0.07]
     )
-    hyperparam_values = [value for value in hyperparams.values()]
+    # sets of combinations of hparams
+    hyperparam_value_sets = product(*[value for value in hyperparams.values()])
 
     # Loop through different combinations of the hyperparameters
-    for run_id, (window_size, hidden_size, conv_channels, nr_layers) in enumerate(product(*hyperparam_values)):
+    for run_id, (window_size, hidden_size, nr_layers, l2) in enumerate(hyperparam_value_sets):
         # tensorboard summary writer
-        writer = SummaryWriter(f'runs/window_size={window_size} hidden_size={hidden_size} conv_channels={conv_channels}')
+        writer = SummaryWriter(f'drive/MyDrive/colab_outputs/lstm_bach/runs/window_size={window_size} hidden_size={hidden_size} l2={l2}')
         
         # Split data in train and test, scale, create datasets and create dataloaders
         train_loader, test_loader = createTrainTestDataloaders(voices, split_size, window_size, batch_size)
 
         # some informational print statements
-        print("\nNew run window/hidden/channels/batch_size:", window_size, "/", hidden_size, "/", conv_channels, "/", batch_size)
-        features, labels = next(iter(train_loader))
-        print("Input size:", features.size(), 
-            "- Output size:", labels.size(), 
-            "- TRAIN batches:", len(train_loader), 
+        print("\nNew run window/hidden/l2/batch_size:", window_size, "/", hidden_size, "/", l2, "/", batch_size)
+        data = next(iter(train_loader))
+        print("Input size:", data["x"].size(), 
+            "- Output size:[", data["y1"].size(), data["y2"].size(), data["y3"].size(), data["y4"].size(), "]\n",
+            "TRAIN batches:", len(train_loader), 
             "- TEST batches:", len(test_loader) if test_loader else "Not available")
         # Input/output dimensions
         input_size = voices.shape[1]
-        output_size = labels.size(1)
+        output_sizes = [data["y1"].size(1), data["y2"].size(1), data["y3"].size(1), data["y4"].size(1)]
 
         # create model
-        lstm_model = LSTM_model(input_size, output_size, hidden_size, nr_layers, batch_size, conv_channels)
+        lstm_model = LSTM_model(input_size, output_sizes, hidden_size, nr_layers, batch_size)
 
         # loss function and optimizer
-        #   multi lable one hot encoded prediction only works with BCEwithlogitloss
-        loss_func = nn.BCEWithLogitsLoss()
+        #   Output of each head is multi-class classification -> cross entropy
+        loss_func = nn.CrossEntropyLoss()
         # AdamW = Adam with fixed weight decay (weight decay performed after controlling parameter-wise step size)
-        optimizer = optim.AdamW(lstm_model.parameters(), lr=0.001, weight_decay=1e-3)
-        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.1, total_iters=1100)
+        optimizer = optim.AdamW(lstm_model.parameters(), lr=0.001, weight_decay=l2)
+        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=750)
         
         # to gpu if possible
         lstm_model = lstm_model.to(device)
         
         # training loop
-        epochs = 1500
-        stateful = True
-        lowest_train_loss, lowest_test_loss = training(lstm_model, train_loader, test_loader, epochs, optimizer, loss_func, scheduler, stateful, writer)
-        
-        # save hparams along with lowest train/test losses
-        writer.add_hparams(
-            {"window_size": window_size, "hidden_size": hidden_size, "conv_channels": conv_channels},
-            {"MinTrainLoss": lowest_train_loss, "MinTestLoss": lowest_test_loss},
-        )
-        # tb writer flush
+        epochs = 1000
+        # In this example we should not use a stateful lstm, as the next samples (subsequent sliding windows) do not follow directly from the current.
+        # This is only the case when the first sample is (for Ex.) [1:10] which is the first window, and [11:20] the next, and so on.
+        # With our data it would be: [1:10] and the next [2:11]. Target value does not matter necessarily. 
+        # More explanation: https://stackoverflow.com/questions/58276337/proper-way-to-feed-time-series-data-to-stateful-lstm
+        #   unfortunately I implemented stateful before knowing these in and outs.
+        stateful = False
+        train_losses, test_losses = training(lstm_model, train_loader, test_loader, epochs, optimizer, loss_func, scheduler, stateful, writer)
+
+        # flush tensorboard writer
         writer.flush()
 
 
