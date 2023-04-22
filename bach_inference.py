@@ -10,7 +10,7 @@ import torch.optim as optim
 
 from sklearn.preprocessing import StandardScaler
 
-from LSTM_bach_multi_task import LSTM_model, NotesDataset
+from LSTM_bach import LSTM_model, NotesDataset
 
 def predictNextNotes(input, steps, lstm_model, voices, scaler):
     # predicted notes
