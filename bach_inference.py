@@ -81,7 +81,7 @@ def main(argv):
     model.load_state_dict(torch.load(argv[0], map_location=torch.device("cpu")))
 
     # load data, 4 voices of instruments
-    voices = np.loadtxt("input.txt")
+    voices = np.loadtxt("input/contrapunctusXIV.txt")
 
     # encode voices
     encoded_voices = createEncodedData(voices)

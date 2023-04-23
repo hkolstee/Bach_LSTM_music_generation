@@ -22,7 +22,7 @@ def main(argv):
     # fluidsynth.init("soundfonts/040_Florestan_String_Quartet.sf2", "alsa")
 
     # load original music
-    original = np.loadtxt("input.txt")
+    original = np.loadtxt("input/contrapunctusXIV.txt")
 
     # load network output music
     # output = np.loadtxt("input.txt")

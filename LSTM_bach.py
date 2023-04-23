@@ -328,7 +328,7 @@ def createTrainTestDataloaders(voices, encoded_voices, split_size, window_size, 
 
 def main():
     # load data, 4 voices of instruments
-    voices = np.loadtxt("input.txt")
+    voices = np.loadtxt("input/contrapunctusXIV.txt")
 
     # remove starting silence, does not promote learning
     # data shape is (3816, 4) after
